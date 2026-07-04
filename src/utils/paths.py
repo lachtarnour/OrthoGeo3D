@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 from pathlib import Path
 
@@ -23,6 +21,10 @@ def get_teeth3ds_dir() -> Path:
     return get_raw_dir() / "Teeth3DS"
 
 
+def get_teeth3ds_train_test_split_dir() -> Path:
+    return get_teeth3ds_dir() / "Teeth3DS_train_test_split"
+
+
 def get_landmark_dir() -> Path:
     return get_raw_dir() / "Teeth3DSLandmarks"
 
@@ -33,6 +35,10 @@ def get_download_dir() -> Path:
 
 def get_processed_dir() -> Path:
     return get_data_dir() / "processed"
+
+
+def get_splits_dir() -> Path:
+    return get_data_dir() / "splits"
 
 
 def _read_env_value(path: Path, key: str) -> str | None:
