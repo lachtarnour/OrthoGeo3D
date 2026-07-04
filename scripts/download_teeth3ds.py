@@ -1,16 +1,23 @@
+#!/usr/bin/env python
+
 import argparse
 import subprocess
+import sys
 from pathlib import Path
 from zipfile import ZipFile
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 from src.utils.logger import get_logger
+from src.utils.paths import get_download_dir, get_landmark_dir, get_teeth3ds_dir
 
 logger = get_logger("download")
 
-ROOT = Path("/Users/nourlachtar/Documents/OrthoTwin3D")
-
-DOWNLOAD_DIR = ROOT / "data/raw/Teeth3DS_downloads"
-TEETH3DS_DIR = ROOT / "data/raw/Teeth3DS"
-LANDMARK_DIR = ROOT / "data/raw/teeth3DSLandmarks"
+DOWNLOAD_DIR = get_download_dir()
+TEETH3DS_DIR = get_teeth3ds_dir()
+LANDMARK_DIR = get_landmark_dir()
 
 TEETH3DS_ARCHIVES = {
     "data_part_1.zip": "https://osf.io/download/qhprs/",
@@ -29,14 +36,39 @@ LANDMARK_ARCHIVES = {
 }
 
 
-def is_valid_zip(path: Path) -> bool:
-    if not path.exists() or path.stat().st_size == 0:
-        return False
-    try:
-        with ZipFile(path) as archive:
-            return archive.testzip() is None
-    except Exception:
-        return False
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Download and extract Teeth3DS and 3DTeethLand annotations.")
+    parser.add_argument("--download_only", action="store_true", help="Download archives without extracting them.")
+    parser.add_argument("--force_extract", action="store_true", help="Extract archives even if target files already exist.")
+    args = parser.parse_args()
+
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    TEETH3DS_DIR.mkdir(parents=True, exist_ok=True)
+    LANDMARK_DIR.mkdir(parents=True, exist_ok=True)
+
+    download_group("Teeth3DS", TEETH3DS_ARCHIVES)
+    download_group("3DTeethLand landmarks", LANDMARK_ARCHIVES)
+
+    if not args.download_only:
+        extract_group("Teeth3DS", TEETH3DS_ARCHIVES, TEETH3DS_DIR, args.force_extract)
+        extract_group("3DTeethLand landmarks", LANDMARK_ARCHIVES, LANDMARK_DIR, args.force_extract)
+
+    print_summary()
+
+
+def download_group(title: str, archives: dict[str, str]) -> None:
+    logger.info("== Download %s ==", title)
+    for filename, url in archives.items():
+        out_path = DOWNLOAD_DIR / filename
+        if is_valid_zip(out_path):
+            logger.info("OK    %s", filename)
+            continue
+
+        logger.info("GET   %s", filename)
+        download_file(url, out_path)
+        if not is_valid_zip(out_path):
+            raise RuntimeError(f"Downloaded file is not a valid zip: {out_path}")
+
 
 def download_file(url: str, out_path: Path) -> None:
     subprocess.run(
@@ -57,20 +89,8 @@ def download_file(url: str, out_path: Path) -> None:
         check=True,
     )
 
-def download(name:str,archives: dict[str,str])->None:
-    logger.info("== Download %s ==", name)
-    for filename,url in archives.items():
-        out_path = DOWNLOAD_DIR / filename
-        if is_valid_zip(out_path):
-            logger.info("OK    %s", filename)
-            continue
-        logger.info("GET   %s", filename)
-        download_file(url, out_path)
-        if not is_valid_zip(out_path):
-            raise RuntimeError(f"Downloaded file is not a valid zip: {out_path}")
 
-
-def extract(title: str, archives: dict[str, str], target_dir: Path, force: bool) -> None:
+def extract_group(title: str, archives: dict[str, str], target_dir: Path, force: bool) -> None:
     logger.info("== Extract %s ==", title)
     for filename in archives:
         zip_path = DOWNLOAD_DIR / filename
@@ -86,6 +106,16 @@ def extract(title: str, archives: dict[str, str], target_dir: Path, force: bool)
         marker.write_text("ok\n", encoding="utf-8")
 
 
+def is_valid_zip(path: Path) -> bool:
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    try:
+        with ZipFile(path) as archive:
+            return archive.testzip() is None
+    except Exception:
+        return False
+
+
 def print_summary() -> None:
     logger.info("== Summary ==")
     logger.info("archives : %s", count_files(DOWNLOAD_DIR, "*.zip"))
@@ -97,28 +127,6 @@ def print_summary() -> None:
 
 def count_files(root: Path, pattern: str) -> int:
     return sum(1 for path in root.rglob(pattern) if path.is_file())
-
-
-def main()-> None:
-    parser = argparse.ArgumentParser(description="Download and extract Teeth3DS and 3DTeethLand annotations.")
-    parser.add_argument("--download_only", action="store_true", help="Download archives without extracting them.")
-    parser.add_argument("--force_extract", action="store_true", help="Extract archives even if target files already exist.")
-    args = parser.parse_args()
-
-    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    TEETH3DS_DIR.mkdir(parents=True, exist_ok=True)
-    LANDMARK_DIR.mkdir(parents=True, exist_ok=True)
-
-
-    download("Teeth3DS", TEETH3DS_ARCHIVES)
-    download("3DTeethLand landmarks", LANDMARK_ARCHIVES)
-
-
-    if not args.download_only:
-        extract("Teeth3DS", TEETH3DS_ARCHIVES, TEETH3DS_DIR, args.force_extract)
-        extract("3DTeethLand landmarks", LANDMARK_ARCHIVES, LANDMARK_DIR, args.force_extract)
-
-    print_summary()
 
 
 if __name__ == "__main__":
