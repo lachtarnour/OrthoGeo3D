@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
@@ -37,8 +39,16 @@ def get_processed_dir() -> Path:
     return get_data_dir() / "processed"
 
 
+def get_processed_split_dir(split: str) -> Path:
+    return get_processed_dir() / split
+
+
 def get_splits_dir() -> Path:
     return get_data_dir() / "splits"
+
+
+def get_split_dir(source: str = "patient_random") -> Path:
+    return get_splits_dir() / source
 
 
 def _read_env_value(path: Path, key: str) -> str | None:

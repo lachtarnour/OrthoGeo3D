@@ -15,7 +15,7 @@ from src.utils.io import ensure_dir
 from src.utils.logger import get_logger
 from src.utils.paths import (
     get_landmark_dir,
-    get_splits_dir,
+    get_split_dir,
     get_teeth3ds_dir,
     get_teeth3ds_train_test_split_dir,
 )
@@ -52,7 +52,7 @@ def main() -> None:
         test_files = args.test_files or [split_dir / "testing_lower.txt", split_dir / "testing_upper.txt"]
         split_records = split_from_files(records, train_files, test_files, args.val_ratio, args.seed)
 
-    out_dir = ensure_dir(args.out_dir or (get_splits_dir() / args.source))
+    out_dir = ensure_dir(args.out_dir or get_split_dir(args.source))
     save_split(out_dir, split_records)
 
     logger.info("Wrote %s splits to %s", args.source, out_dir)

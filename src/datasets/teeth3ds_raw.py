@@ -102,7 +102,7 @@ def load_raw_scan(paths: RawScanPaths) -> dict[str, Any]:
 def build_processed_sample(
     raw_scan: dict[str, Any],
     num_points: int | None = 30000,
-    sampling: str = "random",
+    sampling: str = "fps",
     seed: int | None = None,
     require_labels: bool = True,
     compute_curvature: bool = False,
