@@ -1,0 +1,32 @@
+project:
+  seed: 42
+
+paths:
+  processed_dir: null
+  splits_dir: null
+
+dataset:
+  name: Teeth3DS
+  split_source: patient_random
+  splits:
+    - train
+    - val
+    - test
+  expected_num_points: 30000
+  num_classes: 33
+
+segmentation_dataset:
+  feature_keys:
+    - pos
+    - normal
+  target_key: y_fdi_class
+
+dataloader:
+  train:
+    batch_size: 2
+    num_workers: 0
+    shuffle: true
+  eval:
+    batch_size: 2
+    num_workers: 0
+    shuffle: false

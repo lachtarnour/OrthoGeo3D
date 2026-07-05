@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 from pathlib import Path
 
@@ -49,6 +47,13 @@ def get_splits_dir() -> Path:
 
 def get_split_dir(source: str = "patient_random") -> Path:
     return get_splits_dir() / source
+
+
+def resolve_project_path(value: str | Path | None) -> Path | None:
+    if value is None:
+        return None
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def _read_env_value(path: Path, key: str) -> str | None:
