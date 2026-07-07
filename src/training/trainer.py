@@ -73,6 +73,10 @@ class Trainer:
             with self._autocast_context():
                 output = self.task.training_step(self.model, batch)
                 loss = output["loss"]
+            if not torch.isfinite(loss):
+                raise FloatingPointError(
+                    f"Non-finite training loss at epoch={current_epoch} step={self.global_step + 1}"
+                )
 
             if self.use_amp:
                 self.scaler.scale(loss).backward()

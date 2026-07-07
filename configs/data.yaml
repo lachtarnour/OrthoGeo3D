@@ -23,10 +23,10 @@ segmentation_dataset:
 
 dataloader:
   train:
-    batch_size: 2
+    batch_size: 8
     num_workers: 0
     shuffle: true
   eval:
-    batch_size: 2
+    batch_size: 8
     num_workers: 0
     shuffle: false
