@@ -1,0 +1,40 @@
+experiment:
+  name: dgcnn_random4096
+  seed: 42
+  output_dir: outputs/experiments
+
+model:
+  name: dgcnn_segmentation
+  input_channels: 6
+  num_classes: 33
+  k: 20
+  emb_dims: 1024
+  dropout: 0.5
+
+data:
+  config_path: configs/data.yaml
+  train_split: train
+  val_split: val
+  train_limit: null
+  val_limit: null
+  sampling:
+    num_points: 4096
+    method: random
+    seed: 42
+
+optim:
+  epochs: 100
+  lr: 0.001
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  amp: false
+
+logging:
+  log_every_steps: 20
+  wandb: false
+  project: OrthoGeo3D
+
+checkpoint:
+  save_every_epochs: 10
+  monitor: val_loss
+  mode: min

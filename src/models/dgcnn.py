@@ -1,24 +1,23 @@
-import torch 
+from __future__ import annotations
+
+import torch
 from torch import nn
 
 
-def knn(x:torch.torch,k:int) ->torch.Tensor:
-    """return k-nearest-neighbor indices for feature shaped [B,C,N]."""
-    
-    if x.ndim !=3:
-        raise ValueError(f"Expected x with shape [B,C,N] for {tuple(x.shape)}")
+def knn(x: torch.Tensor, k: int) -> torch.Tensor:
+    """Return k-nearest-neighbor indices for features shaped [B, C, N]."""
+    if x.ndim != 3:
+        raise ValueError(f"Expected x with shape [B, C, N], got {tuple(x.shape)}")
 
     num_points = x.shape[-1]
     if k <= 0:
-        raise ValueError(f"k must be positive got {k}")
-    k = min(k,num_points)
+        raise ValueError(f"k must be positive, got {k}")
+    k = min(k, num_points)
 
-    xixj = torch.matmul(x.transpose(2,1) , x)
-    xx = torch.sum(x**2, dim = 2, keepdim = True)
-    # pairwise distance - ||xi-xj|| **2 (negative)
-    pairwise_distance = -xx - 2 * xixj - xx.transpose(2,1)
-    top_k = pairwise_distance.topk(k=k, dim=-1)[1]
-    return top_k
+    inner = -2.0 * torch.matmul(x.transpose(2, 1), x)
+    xx = torch.sum(x**2, dim=1, keepdim=True)
+    pairwise_distance = -xx - inner - xx.transpose(2, 1)
+    return pairwise_distance.topk(k=k, dim=-1)[1]
 
 def get_graph_feature(
     x: torch.Tensor,
@@ -101,10 +100,10 @@ def conv1d_block(in_channels: int, out_channels: int) -> nn.Sequential:
         nn.LeakyReLU(negative_slope=0.2),
     )
 
-class DGCNNSecgmentation(nn.Module):
-    """
-    input x [B,N,C]
-    output logits [B,N,num_classes]
+class DGCNNSegmentation(nn.Module):
+    """Dynamic Graph CNN for point-wise semantic segmentation.
+
+    Input `x` is [B, N, C], output logits are [B, N, num_classes].
     """
 
     def __init__(
@@ -114,7 +113,8 @@ class DGCNNSecgmentation(nn.Module):
         k:int = 20,
         emb_dims:int = 1024,
         dropout: float = 0.5,
-    )-> None: 
+    ) -> None:
+        super().__init__()
         self.input_channels = input_channels 
         self.num_classes = num_classes
         self.k = k

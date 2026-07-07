@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from contextlib import nullcontext
 from typing import Any
 
@@ -24,6 +25,7 @@ class Trainer:
         max_epochs: int = 100,
         grad_clip: float | None = None,
         amp: bool = False,
+        batch_preprocessor: Callable[[Any], Any] | None = None,
         config: dict[str, Any] | None = None,
     ) -> None:
         self.device = get_device(device)
@@ -35,6 +37,7 @@ class Trainer:
         self.checkpoint_manager = checkpoint_manager
         self.max_epochs = int(max_epochs)
         self.grad_clip = grad_clip
+        self.batch_preprocessor = batch_preprocessor
         self.config = config or {}
         self.global_step = 0
         self.start_epoch = 1
@@ -63,6 +66,8 @@ class Trainer:
         current_epoch = epoch or 0
 
         for batch in train_loader:
+            if self.batch_preprocessor is not None:
+                batch = self.batch_preprocessor(batch)
             batch = move_to_device(batch, self.device)
             self.optimizer.zero_grad(set_to_none=True)
             with self._autocast_context():
@@ -96,6 +101,8 @@ class Trainer:
         current_epoch = epoch or 0
 
         for batch in loader:
+            if self.batch_preprocessor is not None:
+                batch = self.batch_preprocessor(batch)
             batch = move_to_device(batch, self.device)
             with self._autocast_context():
                 output = self.task.validation_step(self.model, batch)

@@ -123,7 +123,7 @@ python scripts/create_patient_splits.py --source patient_random
 Preprocess all three splits:
 
 ```bash
-python scripts/prepare_data.py --all_splits --num_workers 4
+python scripts/prepare_data.py --all_splits --num_workers 4 --sampling fps
 ```
 
 Check the processed dataset:
@@ -151,16 +151,16 @@ Run the tests:
 python -m unittest discover -s tests
 ```
 
-Run the DGCNN one-scan overfit sanity check:
+Run the DGCNN segmentation training:
 
 ```bash
 python scripts/train_segmentation.py --config configs/train/dgcnn_segmentation.yaml
 ```
 
-The default config uses `train_limit: 1` and `val_limit: 1`. This sanity check
-verifies that the training loop, labels, shapes, and loss are coherent before
-scaling to full training. The model receives the point cloud exactly as provided
-by the processed dataset and dataloader.
+The training config uses all train/val scans and randomly samples 4096 points
+per scan inside the training loop from the 30000-point dataloader batch. The
+processed dataset and dataloader keep the full 30000-point contract; the trainer
+samples the model batch.
 
 Run outputs are written to:
 
@@ -182,7 +182,7 @@ Resume from a checkpoint:
 ```bash
 python scripts/train_segmentation.py \
   --config configs/train/dgcnn_segmentation.yaml \
-  --resume outputs/experiments/dgcnn_overfit_1scan/checkpoints/last.pt
+  --resume outputs/experiments/dgcnn_random4096/checkpoints/last.pt
 ```
 
 ## Useful Structure
