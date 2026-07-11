@@ -2,7 +2,6 @@ torch
 numpy
 scipy
 tqdm
-trimesh
-matplotlib
 fpsample
-wandb 
+PyYAML
+wandb

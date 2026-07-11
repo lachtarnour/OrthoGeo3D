@@ -109,7 +109,7 @@ class DGCNNSegmentation(nn.Module):
     def __init__(
         self,
         input_channels: int = 6,
-        num_classes: int = 33,
+        num_classes: int = 17,
         k:int = 20,
         emb_dims:int = 1024,
         dropout: float = 0.5,

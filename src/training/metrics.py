@@ -39,6 +39,11 @@ def segmentation_metrics(
 
     pred = logits.argmax(dim=-1)
     matrix = confusion_matrix(pred, target, num_classes=num_classes, ignore_index=ignore_index).float()
+    return segmentation_metrics_from_confusion(matrix)
+
+
+def segmentation_metrics_from_confusion(matrix: torch.Tensor) -> dict[str, float]:
+    """Return accuracy, mIoU and mean F1 from an accumulated confusion matrix."""
     true_positive = matrix.diag()
     target_count = matrix.sum(dim=1)
     pred_count = matrix.sum(dim=0)
@@ -48,12 +53,12 @@ def segmentation_metrics(
     union = target_count + pred_count - true_positive
     valid_iou = union > 0
     iou = true_positive / union.clamp_min(1.0)
-    miou = iou[valid_iou].mean() if valid_iou.any() else torch.tensor(0.0, device=logits.device)
+    miou = iou[valid_iou].mean() if valid_iou.any() else torch.tensor(0.0, device=matrix.device)
 
     f1_denominator = target_count + pred_count
     valid_f1 = f1_denominator > 0
     f1 = (2.0 * true_positive) / f1_denominator.clamp_min(1.0)
-    mean_f1 = f1[valid_f1].mean() if valid_f1.any() else torch.tensor(0.0, device=logits.device)
+    mean_f1 = f1[valid_f1].mean() if valid_f1.any() else torch.tensor(0.0, device=matrix.device)
 
     return {
         "accuracy": float(accuracy.detach().cpu().item()),

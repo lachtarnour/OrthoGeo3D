@@ -5,8 +5,6 @@ from src.datasets.teeth3ds_processed import (
     Teeth3DSSegmentationDataset,
     build_features,
     build_segmentation_item,
-    compute_class_counts,
-    compute_class_weights,
     create_segmentation_dataloader,
 )
 
@@ -15,7 +13,5 @@ __all__ = [
     "Teeth3DSSegmentationDataset",
     "build_features",
     "build_segmentation_item",
-    "compute_class_counts",
-    "compute_class_weights",
     "create_segmentation_dataloader",
 ]

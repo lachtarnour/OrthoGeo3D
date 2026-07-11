@@ -1,11 +1,12 @@
 from collections.abc import Callable
 from contextlib import nullcontext
-from typing import Any
+from typing import Any, Sequence
 
 import torch
 
 from src.training.checkpointing import CheckpointManager, load_checkpoint
 from src.training.loggers import BaseLogger, CompositeLogger
+from src.training.metrics import segmentation_metrics_from_confusion
 from src.training.tasks import Task
 from src.training.utils import average_metric_dicts, flatten_metrics, get_device, move_to_device
 
@@ -25,7 +26,12 @@ class Trainer:
         max_epochs: int = 100,
         grad_clip: float | None = None,
         amp: bool = False,
-        batch_preprocessor: Callable[[Any], Any] | None = None,
+        train_batch_preprocessor: Callable[[Any], Any] | None = None,
+        eval_batch_preprocessor: Callable[[Any], Any] | None = None,
+        eval_view_ids: Sequence[int] | None = None,
+        validation_every_epochs: int = 1,
+        validate_last_epoch: bool = True,
+        log_every_epochs: int = 1,
         config: dict[str, Any] | None = None,
     ) -> None:
         self.device = get_device(device)
@@ -37,7 +43,12 @@ class Trainer:
         self.checkpoint_manager = checkpoint_manager
         self.max_epochs = int(max_epochs)
         self.grad_clip = grad_clip
-        self.batch_preprocessor = batch_preprocessor
+        self.train_batch_preprocessor = train_batch_preprocessor
+        self.eval_batch_preprocessor = eval_batch_preprocessor
+        self.eval_view_ids = list(eval_view_ids) if eval_view_ids is not None else None
+        self.validation_every_epochs = max(1, int(validation_every_epochs))
+        self.validate_last_epoch = bool(validate_last_epoch)
+        self.log_every_epochs = max(1, int(log_every_epochs))
         self.config = config or {}
         self.global_step = 0
         self.start_epoch = 1
@@ -49,13 +60,15 @@ class Trainer:
             for epoch in range(self.start_epoch, self.max_epochs + 1):
                 train_metrics = self.train_epoch(train_loader, epoch)
                 epoch_metrics = self._prefix_metrics(train_metrics, "train")
-                self.logger.log(epoch_metrics, step=self.global_step, epoch=epoch, split="train")
+                epoch_metrics["train_lr"] = self._current_lr()
+                if self._should_log_epoch(epoch):
+                    self.logger.log(epoch_metrics, step=self.global_step, epoch=epoch, split="train")
 
-                if val_loader is not None:
+                if val_loader is not None and self._should_validate(epoch):
                     val_metrics = self.evaluate(val_loader, epoch=epoch, split="val")
                     epoch_metrics.update(self._prefix_metrics(val_metrics, "val"))
 
-                self._step_scheduler(epoch_metrics)
+                self._step_scheduler()
                 self._save_checkpoints(epoch, epoch_metrics)
         finally:
             self.logger.close()
@@ -63,13 +76,17 @@ class Trainer:
     def train_epoch(self, train_loader, epoch: int | None = None) -> dict[str, float]:
         self.model.train()
         collected = []
+        confusion_matrix = None
         current_epoch = epoch or 0
 
-        for batch in train_loader:
-            if self.batch_preprocessor is not None:
-                batch = self.batch_preprocessor(batch)
+        for batch_index, batch in enumerate(train_loader, start=1):
+            batch = self._preprocess_batch(
+                self.train_batch_preprocessor,
+                batch,
+                epoch=current_epoch,
+                split="train",
+            )
             batch = move_to_device(batch, self.device)
-            self.optimizer.zero_grad(set_to_none=True)
             with self._autocast_context():
                 output = self.task.training_step(self.model, batch)
                 loss = output["loss"]
@@ -78,6 +95,7 @@ class Trainer:
                     f"Non-finite training loss at epoch={current_epoch} step={self.global_step + 1}"
                 )
 
+            self.optimizer.zero_grad(set_to_none=True)
             if self.use_amp:
                 self.scaler.scale(loss).backward()
                 if self.grad_clip is not None:
@@ -94,25 +112,37 @@ class Trainer:
             self.global_step += 1
             metrics = flatten_metrics(output.get("metrics", {}))
             collected.append(metrics)
+            confusion_matrix = _accumulate_confusion_matrix(confusion_matrix, output.get("confusion_matrix"))
             self.logger.log(metrics, step=self.global_step, epoch=current_epoch, split="train_step")
 
-        return average_metric_dicts(collected)
+        return _aggregate_epoch_metrics(collected, confusion_matrix)
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def evaluate(self, loader, epoch: int | None = None, split: str = "val") -> dict[str, float]:
         self.model.eval()
         collected = []
+        confusion_matrix = None
         current_epoch = epoch or 0
+        view_ids = self.eval_view_ids if self.eval_view_ids is not None else [None]
 
-        for batch in loader:
-            if self.batch_preprocessor is not None:
-                batch = self.batch_preprocessor(batch)
-            batch = move_to_device(batch, self.device)
-            with self._autocast_context():
-                output = self.task.validation_step(self.model, batch)
-            collected.append(flatten_metrics(output.get("metrics", {})))
+        for view_id in view_ids:
+            for batch in loader:
+                batch = self._preprocess_batch(
+                    self.eval_batch_preprocessor,
+                    batch,
+                    epoch=current_epoch,
+                    split=split,
+                    view_id=view_id,
+                )
+                batch = move_to_device(batch, self.device)
+                with self._autocast_context():
+                    output = self.task.validation_step(self.model, batch)
+                collected.append(flatten_metrics(output.get("metrics", {})))
+                confusion_matrix = _accumulate_confusion_matrix(confusion_matrix, output.get("confusion_matrix"))
 
-        metrics = average_metric_dicts(collected)
+        metrics = _aggregate_epoch_metrics(collected, confusion_matrix)
+        if self.eval_view_ids is not None:
+            metrics["eval_views"] = float(len(view_ids))
         self.logger.log(self._prefix_metrics(metrics, split), step=self.global_step, epoch=current_epoch, split=split)
         return metrics
 
@@ -135,15 +165,15 @@ class Trainer:
             return nullcontext()
         return torch.autocast(device_type=self.device.type, enabled=True)
 
-    def _step_scheduler(self, metrics: dict[str, float]) -> None:
+    def _step_scheduler(self) -> None:
         if self.scheduler is None:
             return
-        if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            monitor = self.checkpoint_manager.monitor if self.checkpoint_manager else "val_loss"
-            if monitor in metrics:
-                self.scheduler.step(metrics[monitor])
-            return
         self.scheduler.step()
+
+    def _current_lr(self) -> float:
+        if not self.optimizer.param_groups:
+            return 0.0
+        return float(self.optimizer.param_groups[0].get("lr", 0.0))
 
     def _save_checkpoints(self, epoch: int, metrics: dict[str, float]) -> None:
         if self.checkpoint_manager is None:
@@ -176,6 +206,49 @@ class Trainer:
             config=self.config,
         )
 
+    def _should_validate(self, epoch: int) -> bool:
+        if epoch % self.validation_every_epochs == 0:
+            return True
+        return self.validate_last_epoch and epoch == self.max_epochs
+
+    def _should_log_epoch(self, epoch: int) -> bool:
+        if epoch % self.log_every_epochs == 0:
+            return True
+        return self.validate_last_epoch and epoch == self.max_epochs
+
     @staticmethod
     def _prefix_metrics(metrics: dict[str, float], prefix: str) -> dict[str, float]:
         return {f"{prefix}_{key}": value for key, value in metrics.items()}
+
+    @staticmethod
+    def _preprocess_batch(
+        preprocessor: Callable[[Any], Any] | None,
+        batch: Any,
+        epoch: int,
+        split: str,
+        view_id: int | None = None,
+    ) -> Any:
+        if preprocessor is None:
+            return batch
+        return preprocessor(batch, epoch=epoch, split=split, view_id=view_id)
+
+
+def _accumulate_confusion_matrix(total: torch.Tensor | None, value: Any) -> torch.Tensor | None:
+    if not torch.is_tensor(value):
+        return total
+    value = value.detach().cpu()
+    return value if total is None else total + value
+
+
+def _aggregate_epoch_metrics(
+    collected: list[dict[str, float]],
+    confusion_matrix: torch.Tensor | None,
+) -> dict[str, float]:
+    averaged = average_metric_dicts(collected)
+    if confusion_matrix is None:
+        return averaged
+
+    metrics = segmentation_metrics_from_confusion(confusion_matrix.float())
+    if "loss" in averaged:
+        metrics["loss"] = averaged["loss"]
+    return metrics

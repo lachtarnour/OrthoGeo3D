@@ -12,15 +12,18 @@ from src.datasets.landmark_utils import (
     load_landmarks,
     remap_landmarks_to_sample,
 )
-from src.preprocessing.curvature import compute_mean_curvature_magnitude
+from src.datasets.labels import (
+    ARCH_CLASS_TO_FDI,
+    CLASS_TO_FDI,
+    FDI_TO_ARCH_CLASS,
+    FDI_TO_CLASS,
+    map_fdi_to_arch_class,
+    map_fdi_to_class,
+)
 from src.preprocessing.normalize import normalize_landmarks, normalize_points, normalize_tooth_centers
 from src.preprocessing.normals import compute_vertex_normals, normalize_vectors
 from src.preprocessing.sampling import sample_vertex_indices
 from src.utils.io import load_mesh, load_teeth3ds_annotation
-
-FDI_LABELS = (0, 11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48)
-FDI_TO_CLASS = {fdi: idx for idx, fdi in enumerate(FDI_LABELS)}
-CLASS_TO_FDI = {idx: fdi for fdi, idx in FDI_TO_CLASS.items()}
 
 
 @dataclass(frozen=True)
@@ -101,14 +104,11 @@ def load_raw_scan(paths: RawScanPaths) -> dict[str, Any]:
 
 def build_processed_sample(
     raw_scan: dict[str, Any],
-    num_points: int | None = 30000,
-    sampling: str = "fps",
+    num_points: int | None = 60000,
     seed: int | None = None,
     require_labels: bool = True,
-    compute_curvature: bool = False,
 ) -> dict[str, Any]:
     vertices = raw_scan["vertices"]
-    faces = raw_scan["faces"]
     normals = raw_scan["normals"]
     labels = raw_scan["labels"]
     instances = raw_scan["instances"]
@@ -122,12 +122,10 @@ def build_processed_sample(
     pos_norm_all, center, scale = normalize_points(vertices)
     tooth_centers_raw = compute_tooth_centers(vertices, labels) if labels is not None else {}
     tooth_centers_norm = normalize_tooth_centers(tooth_centers_raw, center, scale)
-    curvature_all = compute_mean_curvature_magnitude(pos_norm_all, faces) if compute_curvature else None
 
     source_indices = sample_vertex_indices(
         len(vertices),
         num_points,
-        method=sampling,
         seed=seed,
         points=pos_norm_all,
     )
@@ -137,9 +135,9 @@ def build_processed_sample(
     normal = normals[source_indices].astype(np.float32)
     y_fdi = labels[source_indices].astype(np.int64) if labels is not None else None
     y_fdi_class = map_fdi_to_class(y_fdi) if y_fdi is not None else None
+    y_arch_class = map_fdi_to_arch_class(y_fdi) if y_fdi is not None else None
     y_instance = instances[source_indices].astype(np.int64) if instances is not None else None
     y_binary = (y_fdi > 0).astype(np.int64) if y_fdi is not None else None
-    curvature = curvature_all[source_indices].astype(np.float32) if curvature_all is not None else None
 
     landmarks = raw_scan.get("landmarks") or []
     landmarks = normalize_landmarks(landmarks, center, scale)
@@ -161,13 +159,15 @@ def build_processed_sample(
         "pos": pos,
         "normal": normal,
         "normal_source": raw_scan["normal_source"],
-        "curvature": curvature,
         "y_binary": y_binary,
         "y_fdi": y_fdi,
         "y_fdi_class": y_fdi_class,
+        "y_arch_class": y_arch_class,
         "y_instance": y_instance,
         "fdi_to_class": dict(FDI_TO_CLASS),
         "class_to_fdi": dict(CLASS_TO_FDI),
+        "fdi_to_arch_class": dict(FDI_TO_ARCH_CLASS),
+        "arch_class_to_fdi": dict(ARCH_CLASS_TO_FDI[raw_scan["jaw"]]),
         "source_indices": source_indices.astype(np.int64),
         "landmarks_raw": landmarks_raw,
         "landmarks_norm": landmarks_norm,
@@ -177,19 +177,6 @@ def build_processed_sample(
         "center": center.astype(np.float32),
         "scale": float(scale),
     }
-
-
-def map_fdi_to_class(labels: np.ndarray, mapping: dict[int, int] | None = None) -> np.ndarray:
-    mapping = FDI_TO_CLASS if mapping is None else mapping
-    labels = np.asarray(labels, dtype=np.int64)
-    unknown = sorted(set(labels.reshape(-1).tolist()) - set(mapping))
-    if unknown:
-        raise ValueError(f"Unexpected FDI labels: {unknown}")
-
-    mapped = np.empty_like(labels, dtype=np.int64)
-    for fdi, class_id in mapping.items():
-        mapped[labels == fdi] = class_id
-    return mapped
 
 
 def _load_labels_and_instances(paths: RawScanPaths) -> tuple[np.ndarray | None, np.ndarray | None]:

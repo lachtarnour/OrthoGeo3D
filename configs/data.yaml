@@ -7,26 +7,25 @@ paths:
 
 dataset:
   name: Teeth3DS
-  split_source: patient_random
+  split_source: teethseg22
   splits:
     - train
     - val
-    - test
-  expected_num_points: 30000
-  num_classes: 33
+  expected_num_points: 60000
+  num_classes: 17
 
 segmentation_dataset:
   feature_keys:
     - pos
     - normal
-  target_key: y_fdi_class
+  target_key: y_arch_class
 
 dataloader:
   train:
-    batch_size: 8
-    num_workers: 0
+    batch_size: 16
+    num_workers: 4
     shuffle: true
   eval:
-    batch_size: 8
-    num_workers: 0
+    batch_size: 16
+    num_workers: 4
     shuffle: false
