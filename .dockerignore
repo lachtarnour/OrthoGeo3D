@@ -1,0 +1,51 @@
+.git/
+.gitignore
+.dockerignore
+
+# Local environments and machine-specific files
+.env
+.env.*
+!.env.example
+.vscode/
+.venv/
+.venv-pyg/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Secrets and credentials
+credentials/
+openrc.sh
+cookies.txt
+*.cookies.txt
+*.cookie
+cookie_header.txt
+*_cookie_header.txt
+osf_cookie*.txt
+*.pem
+*.key
+*.crt
+
+# Data and generated artifacts live in OVH Object Storage volumes.
+data/
+outputs/
+checkpoints/
+
+# Heavy model/data/archive artifacts
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.npz
+*.npy
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Not needed in the runtime image
+notebooks/
+docs/
+doc/

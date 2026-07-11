@@ -1,12 +1,11 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Any
 
 import torch
-import torch.nn.functional as F
 
-from src.training.metrics import segmentation_metrics
+from src.training.losses import SegmentationLoss
+from src.training.metrics import confusion_matrix, segmentation_metrics_from_confusion
 
 
 StepOutput = dict[str, Any]
@@ -25,17 +24,17 @@ class Task(ABC):
 
 
 class SegmentationTask(Task):
-    """FDI point-wise segmentation task."""
+    """Point-wise tooth segmentation task."""
 
     def __init__(
         self,
         num_classes: int,
-        class_weights: torch.Tensor | None = None,
         ignore_index: int | None = None,
+        loss_config: Mapping[str, Any] | None = None,
     ) -> None:
         self.num_classes = int(num_classes)
-        self.class_weights = class_weights.float() if class_weights is not None else None
         self.ignore_index = ignore_index
+        self.loss_fn = SegmentationLoss(num_classes=self.num_classes, config=loss_config, ignore_index=ignore_index)
 
     def training_step(self, model: torch.nn.Module, batch: dict[str, Any]) -> StepOutput:
         return self._step(model, batch)
@@ -49,31 +48,18 @@ class SegmentationTask(Task):
 
         outputs = model(x)
         logits = normalize_model_outputs(outputs)["logits"]
-        loss = self._cross_entropy(logits, y)
-        metrics = segmentation_metrics(
-            logits.detach(),
+        loss, loss_metrics = self.loss_fn(logits, y)
+        pred = logits.detach().argmax(dim=-1)
+        matrix = confusion_matrix(
+            pred,
             y.detach(),
             num_classes=self.num_classes,
             ignore_index=self.ignore_index,
         )
+        metrics = segmentation_metrics_from_confusion(matrix.float())
+        metrics.update(loss_metrics)
         metrics["loss"] = float(loss.detach().cpu().item())
-        return {"loss": loss, "metrics": metrics, "logits": logits}
-
-    def _cross_entropy(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        if logits.ndim != 3:
-            raise ValueError(f"Expected logits with shape [B, N, C], got {tuple(logits.shape)}")
-        if logits.shape[-1] != self.num_classes:
-            raise ValueError(f"Expected {self.num_classes} classes, got logits shape {tuple(logits.shape)}")
-
-        weight = self.class_weights.to(logits.device) if self.class_weights is not None else None
-        kwargs = {"weight": weight}
-        if self.ignore_index is not None:
-            kwargs["ignore_index"] = self.ignore_index
-        return F.cross_entropy(
-            logits.reshape(-1, logits.shape[-1]),
-            target.reshape(-1),
-            **kwargs,
-        )
+        return {"loss": loss, "metrics": metrics, "logits": logits, "confusion_matrix": matrix}
 
 
 def normalize_model_outputs(outputs: Any) -> dict[str, torch.Tensor]:

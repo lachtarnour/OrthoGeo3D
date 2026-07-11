@@ -33,12 +33,13 @@ def get_download_dir() -> Path:
     return get_raw_dir() / "Teeth3DS_downloads"
 
 
-def get_processed_dir() -> Path:
-    return get_data_dir() / "processed"
+def get_processed_dir(source: str | None = None) -> Path:
+    root = get_data_dir() / "processed"
+    return root / source if source else root
 
 
-def get_processed_split_dir(split: str) -> Path:
-    return get_processed_dir() / split
+def get_processed_split_dir(split: str, source: str | None = None) -> Path:
+    return get_processed_dir(source) / split
 
 
 def get_splits_dir() -> Path:

@@ -1,96 +1,79 @@
-# OrthoGeo3D
+# OrthoTwin3D
 
-OrthoGeo3D is a research pipeline for analyzing 3D intra-oral scans from
-Teeth3DS / Teeth3DS+ and 3DTeethLand.
+**DGCNN baseline for 3D intra-oral tooth segmentation on Teeth3DS.**
 
-The goal is to turn a 3D scan into a structured anatomical representation:
+Controlled pipeline from raw intra-oral meshes to scan-level point-cloud
+segmentation with a compact 17-class jaw-normalized target.
 
-- tooth / gingiva segmentation and per-point FDI labels;
-- tooth instances and tooth centers;
-- anatomical landmarks;
-- orthodontic-inspired geometric measurements;
-- multi-task models and differentiable geometric constraints.
+![OrthoTwin3D segmentation examples](doc/assets/orthotwin3d_segmentation_examples.png)
 
-This project is not intended for clinical diagnosis. The geometric measurements
-are research indices derived from public annotations and must be interpreted as
-anatomical consistency signals.
+## Overview
 
-![OrthoGeo3D segmentation examples](doc/assets/orthotwin3d_segmentation_examples.png)
+- Teeth3DS / 3DTeethLand preprocessing and `.pt` scan export.
+- Patient-level splits with split-specific processed folders.
+- DGCNN segmentation with mIoU, mean F1, checkpoints, JSONL logs, and optional
+  W&B tracking.
+- Configurable input features: `pos + normal` or `pos + normal + jaw_code`.
 
-## Research Plan
+## Project Direction
 
-The scientific program compares increasingly structured models:
+The current repo focuses on the data foundation and DGCNN segmentation
+baseline. The project plan extends this into an anatomy-aware pipeline.
+
+| Stage | Goal |
+| --- | --- |
+| Data foundation | Stable scan-level `.pt` samples with patient-level splits |
+| Segmentation | DGCNN baseline for 17-class tooth/background labels |
+| Instances and landmarks | Convert point labels into tooth instances and anatomical landmarks |
+| Geometry | Derive tooth and arch indices from predictions |
+| Geometry-constrained learning | Compare segmentation-only, multi-task, and geometry-constrained models |
+| PTv3 extension | Fine-tune a stronger point-transformer backbone on the same tasks |
+
+The geometric measurements are research proxies derived from annotations; they
+are not clinical diagnoses.
+
+## Target
+
+The training target is compact and reversible:
 
 ```text
-DGCNN segmentation only
-vs
-DGCNN multi-task segmentation + landmarks
-vs
-OrthoGeo3D-GC with geometric constraints
-vs
-PTv3 fine-tuned segmentation
-vs
-PTv3 fine-tuned multi-task
-vs
-PTv3-GC fine-tuned
+0     = gingiva/background
+1..16 = tooth position inside one arch
 ```
 
-The pipeline follows this order:
+FDI labels are stored in each processed sample and can be restored when needed.
 
-1. build a reliable scan-level dataset;
-2. train a DGCNN FDI segmentation baseline;
-3. convert FDI predictions into tooth instances;
-4. generate tooth crops for landmark detection;
-5. compute geometric indices;
-6. add multi-task learning, then geometric constraints;
-7. run ablations, robustness analyses, and backbone comparisons.
+## Data Layout
 
-The full scientific plan is documented in
-`docs/PLAN_COMPLET_ORTHOTWIN3D_GC.md`. Step-by-step notes are in `docs/steps/`.
+`DATA_DIR` controls the persistent dataset root:
 
-## Current Status
-
-Already implemented:
-
-- Data foundation: raw Teeth3DS / 3DTeethLand loading, preprocessing, FDI
-  remapping, landmark association, tooth centers, and `.pt` export.
-- Dataset reliability: patient-level splits, processed dataset integrity checks,
-  and a configurable PyTorch segmentation dataloader.
-- Baseline model: DGCNN semantic segmentation for per-point FDI prediction.
-- Training foundation: generic `Trainer` + `Task` architecture, segmentation
-  task, metrics, logging, checkpoints, and resume support.
-- Validation: unit tests for the dataloader, DGCNN forward pass, training task,
-  and checkpointing.
-
-Processed sample format:
-
-```python
-sample = {
-    "scan_id": str,
-    "patient_id": str,
-    "jaw": str,
-    "pos_raw": Tensor[N, 3],
-    "pos": Tensor[N, 3],
-    "normal": Tensor[N, 3],
-    "curvature": Tensor[N] | None,
-    "y_binary": Tensor[N],
-    "y_fdi": Tensor[N],
-    "y_fdi_class": Tensor[N],
-    "y_instance": Tensor[N],
-    "landmarks_raw": dict,
-    "landmarks_norm": dict,
-    "landmark_to_tooth": list,
-    "tooth_centers_raw": dict,
-    "tooth_centers_norm": dict,
-    "center": Tensor[3],
-    "scale": float,
-}
+```text
+DATA_DIR/
+  raw/
+  splits/
+    <split_name>/
+  processed/
+    <split_name>/
+      train/*.pt
+      val/*.pt
 ```
 
-`y_fdi` keeps the real FDI labels. `y_fdi_class` is used by
-`CrossEntropyLoss`.
+Processed scans contain normalized geometry, normals, labels, instances,
+landmarks, tooth centers, and metadata.
 
-## Installation
+## Sampling
+
+Preprocessing stores geometry-only FPS scans with 60,000 points. Training uses
+deterministic overlapping 15,000-point views; class imbalance is handled in the
+loss. See [doc/sampling.md](doc/sampling.md).
+
+## Experiments
+
+| Experiment | Result | Artifacts |
+| --- | --- | --- |
+| [`DGCNN input features`](experiments/dgcnn_input_features_comparison_teethseg22/dgcnn_input_features.md) | `jaw_code` gives no clear gain. Baseline: `pos + normal`, mIoU 0.6370, F1 0.7382. | configs, figures, shared model weights |
+
+## Quick Start
 
 ```bash
 python3 -m venv .venv
@@ -98,62 +81,41 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-
-## Usage
-
-Download or verify the data:
+Prepare data:
 
 ```bash
-python scripts/download_all_teeth3ds.py
+python scripts/download_teeth3ds.py
+python scripts/create_patient_splits.py
+python scripts/prepare_data.py --all_splits --num_points 60000 --num_workers 4
+python scripts/check_dataset_integrity.py --expected_num_points 60000 --allow_skipped
 ```
 
-Create patient-level splits:
+Train locally:
 
 ```bash
-python scripts/create_patient_splits.py --source patient_random
+python scripts/train_segmentation.py \
+  --config configs/train/dgcnn_segmentation.yaml
 ```
 
-Preprocess all three splits:
-
-```bash
-python scripts/prepare_data.py --all_splits --num_workers 4 --sampling fps
-```
-
-Check the processed dataset:
-
-```bash
-python scripts/check_dataset_integrity.py
-```
-
-Run the DGCNN segmentation training:
-
-```bash
-python scripts/train_segmentation.py --config configs/train/dgcnn_segmentation.yaml
-```
-
-The training config uses all train/val scans and randomly samples 4096 points
-per scan inside the training loop from the 30000-point dataloader batch. The
-processed dataset and dataloader keep the full 30000-point contract; the trainer
-samples the model batch.
-
-Resume from a checkpoint:
+Resume:
 
 ```bash
 python scripts/train_segmentation.py \
   --config configs/train/dgcnn_segmentation.yaml \
-  --resume outputs/experiments/dgcnn_random4096/checkpoints/last.pt
+  --resume outputs/experiments/dgcnn_fps60k_mv15000_val10v_eval5_bs16/checkpoints/last.pt
 ```
 
-## Useful Structure
+## Reference
 
-```text
-configs/data.yaml                     # dataset and dataloaders
-configs/train/dgcnn_segmentation.yaml # initial training config
-scripts/prepare_data.py               # raw -> .pt
-scripts/check_dataset_integrity.py     # processed dataset validation
-scripts/train_segmentation.py          # segmentation training entrypoint
-src/datasets/                          # raw and processed datasets
-src/models/dgcnn.py                    # DGCNN segmentation
-src/training/                          # generic trainer, tasks, metrics, logs
-docs/                                  # scientific plan and step notes
-```
+| Path | Role |
+| --- | --- |
+| `configs/data.yaml` | Dataset paths, split source, features, targets, dataloaders |
+| `configs/train/dgcnn_segmentation.yaml` | Local DGCNN baseline |
+| `configs/train/dgcnn_segmentation_ovh_gpu.yaml` | OVH GPU DGCNN baseline |
+| `scripts/create_patient_splits.py` | Build patient-level split files |
+| `scripts/prepare_data.py` | Convert raw scans to processed `.pt` samples |
+| `scripts/check_dataset_integrity.py` | Validate processed data before training |
+| `scripts/train_segmentation.py` | Train or resume segmentation models |
+| `src/datasets/` | Labels, raw loading, processed dataset |
+| `src/models/dgcnn.py` | DGCNN segmentation model |
+| `src/training/` | Losses, task, trainer, metrics, loggers, checkpoints |

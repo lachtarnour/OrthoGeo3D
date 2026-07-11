@@ -1,10 +1,54 @@
 __pycache__/
 *.py[cod]
 .DS_Store
-.vscode/
 
 # Local environments
 .env
 .venv/
+.venv-pyg/
+venv/
+env/
+
+# Local experiment trackers
+wandb/
+
+# Local exploratory notebooks
+notebooks/
+
+# Local docs excluded from this repo sync
+docs/
+
+# Local credentials/cookies for dataset downloads
+cookies.txt
+*.cookies.txt
+*.cookie
+cookie_header.txt
+*_cookie_header.txt
+osf_cookie*.txt
+
+# Large datasets and generated samples
 data/
-outputs/
+
+credentials/
+
+# Training outputs and model artifacts
+outputs/**
+ovh_artifacts/**
+checkpoints/**
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Explicitly published experiment artifacts
+!experiments/**/*.pt
+
+# Downloaded archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Editor-local settings
+.vscode/
+openrc.sh

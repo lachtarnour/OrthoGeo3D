@@ -1,7 +1,7 @@
 experiment:
-  name: dgcnn_fps60k_mv15000_val10v_eval5_bs16
+  name: teethseg22_posnorm6ch_15k_b8
   seed: 42
-  output_dir: outputs/experiments
+  output_dir: /workspace/outputs/experiments
 
 model:
   name: dgcnn_segmentation
@@ -9,7 +9,7 @@ model:
   num_classes: 17
   k: 20
   emb_dims: 1024
-  dropout: 0.5
+  dropout: 0.3
 
 data:
   config_path: configs/data.yaml
@@ -17,13 +17,28 @@ data:
   val_split: val
   train_limit: null
   val_limit: null
+  dataloader:
+    train:
+      batch_size: 8
+      num_workers: 4
+      shuffle: true
+      pin_memory: true
+      persistent_workers: true
+      prefetch_factor: 2
+    eval:
+      batch_size: 8
+      num_workers: 4
+      shuffle: false
+      pin_memory: true
+      persistent_workers: true
+      prefetch_factor: 2
   sampling:
     num_points: 15000
     method: overlapping_multiview
     core_points: 10000
     num_views: 10
     eval_view: 0
-    eval_views: all
+    eval_views: [0, 3, 6]
     seed: 42
 
 optim:
@@ -31,13 +46,19 @@ optim:
   lr: 0.001
   weight_decay: 0.0001
   grad_clip: 1.0
-  amp: false
+  amp: true
+  device: cuda
   scheduler:
     name: cosine
     min_lr: 0.00005
 
+performance:
+  tf32: true
+  float32_matmul_precision: high
+  cudnn_benchmark: false
+
 validation:
-  every_epochs: 5
+  every_epochs: 3
   last_epoch: true
 
 loss:
@@ -57,8 +78,9 @@ loss:
       max_loss: 6.0
 
 logging:
-  log_every_steps: 20
-  wandb: false
+  every_epochs: 3
+  log_train_steps: false
+  wandb: true
   project: OrthoTwin3D
 
 checkpoint:

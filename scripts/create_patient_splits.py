@@ -22,12 +22,27 @@ from src.utils.paths import (
 
 SPLITS = ("train", "val", "test")
 JAW_FILES = {"train": "training", "val": "validation", "test": "testing"}
+TEETHSEG22_FILES = {
+    "teethseg22": {
+        "train": ("public-training-set-1.txt", "public-training-set-2.txt"),
+        "val": ("private-testing-set.txt",),
+    },
+    "teethseg22_3way": {
+        "train": ("public-training-set-1.txt",),
+        "val": ("public-training-set-2.txt",),
+        "test": ("private-testing-set.txt",),
+    },
+}
 logger = get_logger("create_patient_splits")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create Teeth3DS split files.")
-    parser.add_argument("--source", choices=("patient_random", "from_files"), default="patient_random")
+    parser.add_argument(
+        "--source",
+        choices=("patient_random", "from_files", "teethseg22", "teethseg22_3way"),
+        default="teethseg22",
+    )
     parser.add_argument("--raw_dir", default=str(get_teeth3ds_dir()))
     parser.add_argument("--landmark_dir", default=str(get_landmark_dir()))
     parser.add_argument("--out_dir", help="Default: data/splits/<source>")
@@ -46,17 +61,23 @@ def main() -> None:
 
     if args.source == "patient_random":
         split_records = patient_random_split(records, args.train_ratio, args.val_ratio, args.test_ratio, args.seed)
-    else:
+    elif args.source == "from_files":
         split_dir = get_teeth3ds_train_test_split_dir()
         train_files = args.train_files or [split_dir / "training_lower.txt", split_dir / "training_upper.txt"]
         test_files = args.test_files or [split_dir / "testing_lower.txt", split_dir / "testing_upper.txt"]
         split_records = split_from_files(records, train_files, test_files, args.val_ratio, args.seed)
+    else:
+        split_records = predefined_teethseg22_split(
+            records,
+            Path(args.raw_dir) / "3DTeethSeg22_challenge_train_test_split",
+            source=args.source,
+        )
 
     out_dir = ensure_dir(args.out_dir or get_split_dir(args.source))
     save_split(out_dir, split_records)
 
     logger.info("Wrote %s splits to %s", args.source, out_dir)
-    for split in SPLITS:
+    for split in active_split_names(split_records):
         records = split_records[split]
         logger.info("%s: %s patients, %s scans", split, len({r.patient_id for r in records}), len(records))
 
@@ -95,6 +116,31 @@ def split_from_files(records, train_files, test_files, val_ratio: float, seed: i
     }
 
 
+def predefined_teethseg22_split(records, split_dir: Path, source: str = "teethseg22"):
+    files = {
+        split: [split_dir / name for name in filenames]
+        for split, filenames in TEETHSEG22_FILES[source].items()
+    }
+    by_id = {r.scan_id: r for r in records}
+    split_records = {}
+    missing_ids = {}
+    for split, paths in files.items():
+        scan_ids = read_scan_ids(paths)
+        missing = sorted(scan_id for scan_id in scan_ids if scan_id not in by_id)
+        if missing:
+            missing_ids[split] = missing
+        split_records[split] = sorted([by_id[scan_id] for scan_id in scan_ids if scan_id in by_id], key=lambda r: r.scan_id)
+
+    if missing_ids:
+        details = ", ".join(f"{split}={values[:5]}" for split, values in missing_ids.items())
+        raise ValueError(f"3DTeethSeg22 split references unknown scan ids: {details}")
+    return split_records
+
+
+def teethseg22_split(records, split_dir: Path):
+    return predefined_teethseg22_split(records, split_dir, source="teethseg22")
+
+
 def group_by_patient(records):
     by_patient = defaultdict(list)
     for record in records:
@@ -115,8 +161,14 @@ def read_scan_ids(paths) -> list[str]:
     return scan_ids
 
 
+def active_split_names(split_records) -> tuple[str, ...]:
+    return tuple(split for split in SPLITS if split_records.get(split))
+
+
 def save_split(out_dir: Path, split_records) -> None:
-    for split in SPLITS:
+    clear_split_files(out_dir)
+    splits = active_split_names(split_records)
+    for split in splits:
         records = split_records[split]
         scan_ids = [r.scan_id for r in records]
         patients = sorted({r.patient_id for r in records})
@@ -136,7 +188,7 @@ def save_split(out_dir: Path, split_records) -> None:
     with (out_dir / "split_stats.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["split", "patients", "scans", "upper", "lower", "with_annotations", "with_landmarks"])
-        for split in SPLITS:
+        for split in splits:
             records = split_records[split]
             writer.writerow(
                 [
@@ -150,12 +202,31 @@ def save_split(out_dir: Path, split_records) -> None:
                 ]
             )
 
-    patients = {split: {r.patient_id for r in split_records[split]} for split in SPLITS}
+    patients = {split: {r.patient_id for r in split_records[split]} for split in splits}
     with (out_dir / "patient_overlaps.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["split_a", "split_b", "overlap_patients"])
-        for split_a, split_b in (("train", "val"), ("train", "test"), ("val", "test")):
-            writer.writerow([split_a, split_b, len(patients[split_a] & patients[split_b])])
+        for index, split_a in enumerate(splits):
+            for split_b in splits[index + 1 :]:
+                writer.writerow([split_a, split_b, len(patients[split_a] & patients[split_b])])
+
+
+def clear_split_files(out_dir: Path) -> None:
+    names = ["split_stats.csv", "patient_overlaps.csv"]
+    for split in SPLITS:
+        prefix = JAW_FILES[split]
+        names.extend(
+            [
+                f"{split}.txt",
+                f"{split}_patients.txt",
+                f"{prefix}_lower.txt",
+                f"{prefix}_upper.txt",
+            ]
+        )
+    for name in names:
+        path = out_dir / name
+        if path.exists():
+            path.unlink()
 
 
 if __name__ == "__main__":
