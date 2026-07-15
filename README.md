@@ -62,7 +62,7 @@ views.
 | Model | Best epoch | Validation loss | Accuracy | Mean F1 | mIoU | Learning curve | Remarks |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | DGCNN, GroupNorm, no augmentation | 57 | 0.7930 | 0.8898 | 0.7310 | 0.6264 | [View curves](doc/assets/learning_curves/dgcnn_groupnorm_no_augmentation.png) | Fixed-evaluation train-val mIoU gap: 0.1858. Train-only geometric augmentation proposed. |
-| DGCNN, GroupNorm, train augmentation | 36 | 0.6649 | 0.9067 | 0.7593 | 0.6682 | Not available | Gap reduced to 0.1078. Rare third-molar classes 1 and 16 occur in only 9 train scans, versus 79 and 73 validation scans. |
+| DGCNN, GroupNorm, train augmentation | 36 | 0.6649 | 0.9067 | 0.7593 | 0.6682 | [View curves](doc/assets/learning_curves/dgcnn_groupnorm_with_augmentation.png) | Gap reduced to 0.1078. Rare third-molar classes 1 and 16 occur in only 9 train scans, versus 79 and 73 validation scans. |
 
 ## Data
 
