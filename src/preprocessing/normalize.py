@@ -5,7 +5,9 @@ from typing import Any
 import numpy as np
 
 
-def normalize_points(points: np.ndarray, eps: float = 1.0e-8) -> tuple[np.ndarray, np.ndarray, float]:
+def normalize_points(
+    points: np.ndarray, eps: float = 1.0e-8
+) -> tuple[np.ndarray, np.ndarray, float]:
     """Center and scale points into a unit-radius coordinate frame."""
     points = np.asarray(points, dtype=np.float32)
     if points.ndim != 2 or points.shape[1] != 3:
@@ -31,7 +33,9 @@ def normalize_landmarks(
     normalized = []
     for lm in landmarks:
         item = dict(lm)
-        item["coord_norm"] = ((np.asarray(item["coord"], dtype=np.float32) - center) / scale).astype(np.float32)
+        item["coord_norm"] = (
+            (np.asarray(item["coord"], dtype=np.float32) - center) / scale
+        ).astype(np.float32)
         nearest_distance = item.get("nearest_distance")
         if nearest_distance is not None:
             item["nearest_distance_norm"] = float(nearest_distance) / scale
@@ -48,6 +52,8 @@ def normalize_tooth_centers(
     scale = float(scale) if scale else 1.0
 
     return {
-        tooth_key: ((np.asarray(tooth_center, dtype=np.float32) - center) / scale).astype(np.float32).tolist()
+        tooth_key: ((np.asarray(tooth_center, dtype=np.float32) - center) / scale)
+        .astype(np.float32)
+        .tolist()
         for tooth_key, tooth_center in tooth_centers.items()
     }

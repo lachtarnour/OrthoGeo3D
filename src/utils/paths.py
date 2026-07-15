@@ -6,7 +6,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def get_data_dir() -> Path:
-    value = os.environ.get("DATA_DIR") or _read_env_value(PROJECT_ROOT / ".env", "DATA_DIR")
+    value = os.environ.get("DATA_DIR") or _read_env_value(
+        PROJECT_ROOT / ".env", "DATA_DIR"
+    )
     if value:
         path = Path(_clean_env_value(value)).expanduser()
         return path if path.is_absolute() else PROJECT_ROOT / path
@@ -21,10 +23,6 @@ def get_teeth3ds_dir() -> Path:
     return get_raw_dir() / "Teeth3DS"
 
 
-def get_teeth3ds_train_test_split_dir() -> Path:
-    return get_teeth3ds_dir() / "Teeth3DS_train_test_split"
-
-
 def get_landmark_dir() -> Path:
     return get_raw_dir() / "Teeth3DSLandmarks"
 
@@ -33,21 +31,27 @@ def get_download_dir() -> Path:
     return get_raw_dir() / "Teeth3DS_downloads"
 
 
-def get_processed_dir(source: str | None = None) -> Path:
-    root = get_data_dir() / "processed"
-    return root / source if source else root
-
-
-def get_processed_split_dir(split: str, source: str | None = None) -> Path:
-    return get_processed_dir(source) / split
+def get_processed_dir(source: str) -> Path:
+    return get_data_dir() / "processed" / source
 
 
 def get_splits_dir() -> Path:
     return get_data_dir() / "splits"
 
 
-def get_split_dir(source: str = "patient_random") -> Path:
+def get_split_dir(source: str) -> Path:
     return get_splits_dir() / source
+
+
+def get_output_dir() -> Path:
+    value = os.environ.get("OUTPUT_DIR") or _read_env_value(
+        PROJECT_ROOT / ".env",
+        "OUTPUT_DIR",
+    )
+    if value:
+        path = Path(_clean_env_value(value)).expanduser()
+        return path if path.is_absolute() else PROJECT_ROOT / path
+    return PROJECT_ROOT / "outputs"
 
 
 def resolve_project_path(value: str | Path | None) -> Path | None:

@@ -4,14 +4,41 @@ import numpy as np
 
 FDI_LABELS = (
     0,
-    11, 12, 13, 14, 15, 16, 17, 18,
-    21, 22, 23, 24, 25, 26, 27, 28,
-    31, 32, 33, 34, 35, 36, 37, 38,
-    41, 42, 43, 44, 45, 46, 47, 48,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
 )
-FDI_TO_CLASS = {fdi: idx for idx, fdi in enumerate(FDI_LABELS)}
-CLASS_TO_FDI = {idx: fdi for fdi, idx in FDI_TO_CLASS.items()}
-
+FDI_TO_CLASS = {fdi: class_id for class_id, fdi in enumerate(FDI_LABELS)}
+CLASS_TO_FDI = {class_id: fdi for fdi, class_id in FDI_TO_CLASS.items()}
 ARCH_CLASS_LABELS = tuple(range(17))
 UPPER_ARCH_CLASS_TO_FDI = {
     0: 0,
@@ -62,13 +89,20 @@ FDI_TO_ARCH_CLASS = {
 }
 
 
-def map_fdi_to_class(labels: np.ndarray, mapping: dict[int, int] | None = None) -> np.ndarray:
-    return _map_labels(labels, FDI_TO_CLASS if mapping is None else mapping, name="FDI")
-
-
-def map_fdi_to_arch_class(labels: np.ndarray, mapping: dict[int, int] | None = None) -> np.ndarray:
+def map_fdi_to_arch_class(
+    labels: np.ndarray, mapping: dict[int, int] | None = None
+) -> np.ndarray:
     """Map Teeth3DS FDI labels to a jaw-normalized 17-class target."""
-    return _map_labels(labels, FDI_TO_ARCH_CLASS if mapping is None else mapping, name="FDI")
+    return _map_labels(
+        labels, FDI_TO_ARCH_CLASS if mapping is None else mapping, name="FDI"
+    )
+
+
+def map_fdi_to_class(
+    labels: np.ndarray, mapping: dict[int, int] | None = None
+) -> np.ndarray:
+    """Map raw FDI labels to the global contiguous 33-class target."""
+    return _map_labels(labels, FDI_TO_CLASS if mapping is None else mapping, name="FDI")
 
 
 def map_arch_class_to_fdi(labels: np.ndarray, jaw: str) -> np.ndarray:

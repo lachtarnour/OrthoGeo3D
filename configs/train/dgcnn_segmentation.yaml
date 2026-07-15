@@ -1,67 +1,64 @@
-experiment:
-  name: dgcnn_fps60k_mv15000_val10v_eval5_bs16
+run:
+  name: teethseg22_dgcnn_groupnorm
   seed: 42
-  output_dir: outputs/experiments
 
 model:
-  name: dgcnn_segmentation
   input_channels: 6
   num_classes: 17
   k: 20
   emb_dims: 1024
   dropout: 0.5
 
-data:
-  config_path: configs/data.yaml
-  train_split: train
-  val_split: val
-  train_limit: null
-  val_limit: null
-  sampling:
-    num_points: 15000
-    method: overlapping_multiview
-    core_points: 10000
-    num_views: 10
-    eval_view: 0
-    eval_views: all
-    seed: 42
+sampling:
+  source_points: 60000
+  num_points: 15000
+  eval_views: 2
 
-optim:
+augmentation:
+  rotation_degrees: [5.0, 5.0, 10.0]
+  scale_range: [0.95, 1.05]
+  translation_range: 0.01
+  jitter_std: 0.001
+  jitter_clip: 0.003
+
+training:
   epochs: 100
   lr: 0.001
   weight_decay: 0.0001
   grad_clip: 1.0
-  amp: false
-  scheduler:
-    name: cosine
-    min_lr: 0.00005
+  amp: true
+  validation_every_epochs: 1
+  log_every_epochs: 1
+  evaluate_epoch_zero: true
+  monitor: val_miou
+  monitor_mode: max
 
-validation:
-  every_epochs: 5
-  last_epoch: true
+scheduler:
+  name: reduce_on_plateau
+  factor: 0.8
+  patience: 2
+  threshold: 0.001
+  threshold_mode: abs
+  min_lr: 0.00005
+
+performance:
+  tf32: true
+  float32_matmul_precision: high
 
 loss:
-  components:
-    cross_entropy:
-      enabled: true
-      weight: 1.0
-      max_loss: 6.0
-    dice:
-      enabled: true
-      weight: 1.0
-      include_background: false
-      smooth: 1.0
-    binary:
-      enabled: true
-      weight: 0.5
-      max_loss: 6.0
+  cross_entropy_weight: 1.0
+  dice_weight: 1.0
+  binary_weight: 0.5
+  max_cross_entropy: 6.0
+  max_binary: 6.0
 
 logging:
-  log_every_steps: 20
-  wandb: false
+  wandb: true
   project: OrthoTwin3D
 
 checkpoint:
   save_every_epochs: 10
-  monitor: val_miou
-  mode: max
+
+early_stopping:
+  patience: 7
+  min_delta: 0.001

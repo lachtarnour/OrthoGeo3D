@@ -20,7 +20,11 @@ from src.datasets.labels import (
     map_fdi_to_arch_class,
     map_fdi_to_class,
 )
-from src.preprocessing.normalize import normalize_landmarks, normalize_points, normalize_tooth_centers
+from src.preprocessing.normalize import (
+    normalize_landmarks,
+    normalize_points,
+    normalize_tooth_centers,
+)
 from src.preprocessing.normals import compute_vertex_normals, normalize_vectors
 from src.preprocessing.sampling import sample_vertex_indices
 from src.utils.io import load_mesh, load_teeth3ds_annotation
@@ -36,7 +40,9 @@ class RawScanPaths:
     landmark_path: Path | None = None
 
 
-def discover_raw_scans(raw_root: str | Path, landmark_root: str | Path | None = None) -> list[RawScanPaths]:
+def discover_raw_scans(
+    raw_root: str | Path, landmark_root: str | Path | None = None
+) -> list[RawScanPaths]:
     raw_root = Path(raw_root)
     landmark_root = Path(landmark_root) if landmark_root else None
     meshes = sorted(raw_root.rglob("*.obj"))
@@ -78,14 +84,20 @@ def load_raw_scan(paths: RawScanPaths) -> dict[str, Any]:
 
     labels, instances = _load_labels_and_instances(paths)
     if labels is not None:
-        labels = _validate_annotation_length(labels, len(vertices), "labels", paths.scan_id)
+        labels = _validate_annotation_length(
+            labels, len(vertices), "labels", paths.scan_id
+        )
     if instances is not None:
-        instances = _validate_annotation_length(instances, len(vertices), "instances", paths.scan_id)
+        instances = _validate_annotation_length(
+            instances, len(vertices), "instances", paths.scan_id
+        )
     _validate_tooth_annotation_consistency(labels, instances, paths.scan_id)
 
     landmarks = load_landmarks(paths.landmark_path)
     if landmarks:
-        landmarks = associate_landmarks_to_vertices(landmarks, vertices, labels, instances)
+        landmarks = associate_landmarks_to_vertices(
+            landmarks, vertices, labels, instances
+        )
 
     return {
         "scan_id": paths.scan_id,
@@ -120,7 +132,9 @@ def build_processed_sample(
         raise ValueError(f"Missing instances for scan {raw_scan['scan_id']}")
 
     pos_norm_all, center, scale = normalize_points(vertices)
-    tooth_centers_raw = compute_tooth_centers(vertices, labels) if labels is not None else {}
+    tooth_centers_raw = (
+        compute_tooth_centers(vertices, labels) if labels is not None else {}
+    )
     tooth_centers_norm = normalize_tooth_centers(tooth_centers_raw, center, scale)
 
     source_indices = sample_vertex_indices(
@@ -134,10 +148,12 @@ def build_processed_sample(
     pos = pos_norm_all[source_indices].astype(np.float32)
     normal = normals[source_indices].astype(np.float32)
     y_fdi = labels[source_indices].astype(np.int64) if labels is not None else None
+    y_binary = (y_fdi > 0).astype(np.int64) if y_fdi is not None else None
     y_fdi_class = map_fdi_to_class(y_fdi) if y_fdi is not None else None
     y_arch_class = map_fdi_to_arch_class(y_fdi) if y_fdi is not None else None
-    y_instance = instances[source_indices].astype(np.int64) if instances is not None else None
-    y_binary = (y_fdi > 0).astype(np.int64) if y_fdi is not None else None
+    y_instance = (
+        instances[source_indices].astype(np.int64) if instances is not None else None
+    )
 
     landmarks = raw_scan.get("landmarks") or []
     landmarks = normalize_landmarks(landmarks, center, scale)
@@ -179,7 +195,9 @@ def build_processed_sample(
     }
 
 
-def _load_labels_and_instances(paths: RawScanPaths) -> tuple[np.ndarray | None, np.ndarray | None]:
+def _load_labels_and_instances(
+    paths: RawScanPaths,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
     if paths.annotation_path is None:
         return None, None
 
@@ -190,15 +208,21 @@ def _load_labels_and_instances(paths: RawScanPaths) -> tuple[np.ndarray | None, 
             f"does not match patient_id={paths.patient_id}"
         )
     if annotation["jaw"] != paths.jaw:
-        raise ValueError(f"{paths.scan_id}: annotation jaw={annotation['jaw']} does not match path jaw={paths.jaw}")
+        raise ValueError(
+            f"{paths.scan_id}: annotation jaw={annotation['jaw']} does not match path jaw={paths.jaw}"
+        )
 
     return annotation["labels"], annotation["instances"]
 
 
-def _validate_annotation_length(values: np.ndarray, expected: int, name: str, scan_id: str) -> np.ndarray:
+def _validate_annotation_length(
+    values: np.ndarray, expected: int, name: str, scan_id: str
+) -> np.ndarray:
     values = np.asarray(values).reshape(-1)
     if len(values) != expected:
-        raise ValueError(f"{scan_id}: {name} length {len(values)} does not match vertices {expected}")
+        raise ValueError(
+            f"{scan_id}: {name} length {len(values)} does not match vertices {expected}"
+        )
     return values.astype(np.int64)
 
 
@@ -226,8 +250,16 @@ def _validate_tooth_annotation_consistency(
         fdi_to_instances.setdefault(fdi, set()).add(inst)
         instance_to_fdis.setdefault(inst, set()).add(fdi)
 
-    fdi_conflicts = {fdi: sorted(values) for fdi, values in fdi_to_instances.items() if len(values) > 1}
-    instance_conflicts = {inst: sorted(values) for inst, values in instance_to_fdis.items() if len(values) > 1}
+    fdi_conflicts = {
+        fdi: sorted(values)
+        for fdi, values in fdi_to_instances.items()
+        if len(values) > 1
+    }
+    instance_conflicts = {
+        inst: sorted(values)
+        for inst, values in instance_to_fdis.items()
+        if len(values) > 1
+    }
     if fdi_conflicts or instance_conflicts or mixed_zero_pairs:
         parts = []
         if fdi_conflicts:
@@ -236,7 +268,9 @@ def _validate_tooth_annotation_consistency(
             parts.append(f"instance_to_fdis={instance_conflicts}")
         if mixed_zero_pairs:
             parts.append(f"mixed_zero_pairs={sorted(mixed_zero_pairs)}")
-        raise ValueError(f"{scan_id}: inconsistent tooth annotations ({'; '.join(parts)})")
+        raise ValueError(
+            f"{scan_id}: inconsistent tooth annotations ({'; '.join(parts)})"
+        )
 
 
 def _scan_id_from_mesh(mesh_path: Path) -> str:
@@ -246,11 +280,21 @@ def _scan_id_from_mesh(mesh_path: Path) -> str:
 def _infer_jaw(path: Path) -> str:
     parts = {part.lower() for part in path.parts}
     stem = path.stem.lower()
-    folder_jaw = "upper" if "upper" in parts else "lower" if "lower" in parts else "unknown"
-    file_jaw = "upper" if stem.endswith("_upper") else "lower" if stem.endswith("_lower") else "unknown"
+    folder_jaw = (
+        "upper" if "upper" in parts else "lower" if "lower" in parts else "unknown"
+    )
+    file_jaw = (
+        "upper"
+        if stem.endswith("_upper")
+        else "lower"
+        if stem.endswith("_lower")
+        else "unknown"
+    )
 
     if folder_jaw != "unknown" and file_jaw != "unknown" and folder_jaw != file_jaw:
-        raise ValueError(f"Jaw conflict for {path}: folder={folder_jaw}, file={file_jaw}")
+        raise ValueError(
+            f"Jaw conflict for {path}: folder={folder_jaw}, file={file_jaw}"
+        )
     if file_jaw != "unknown":
         return file_jaw
     return folder_jaw
@@ -264,7 +308,9 @@ def _infer_patient_id(scan_id: str, jaw: str) -> str:
     return text
 
 
-def _find_landmark_path(landmark_root: Path | None, jaw: str, patient_id: str, scan_id: str) -> Path | None:
+def _find_landmark_path(
+    landmark_root: Path | None, jaw: str, patient_id: str, scan_id: str
+) -> Path | None:
     if landmark_root is None or jaw == "unknown":
         return None
     candidate = landmark_root / jaw / patient_id / f"{scan_id}__kpt.json"

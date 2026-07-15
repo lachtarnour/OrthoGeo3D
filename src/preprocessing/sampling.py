@@ -16,7 +16,9 @@ def sample_vertex_indices(
     return farthest_point_sample(_require_points(points), num_samples, seed=seed)
 
 
-def farthest_point_sample(points: np.ndarray, num_samples: int, seed: int | None = None) -> np.ndarray:
+def farthest_point_sample(
+    points: np.ndarray, num_samples: int, seed: int | None = None
+) -> np.ndarray:
     """Sample existing vertices with farthest point sampling."""
     points = _as_points(points)
     rng = np.random.default_rng(seed)
@@ -32,7 +34,9 @@ def farthest_point_sample(points: np.ndarray, num_samples: int, seed: int | None
     return _farthest_point_sample_numpy(points, num_samples, start_idx)
 
 
-def _farthest_point_sample_numpy(points: np.ndarray, num_samples: int, start_idx: int) -> np.ndarray:
+def _farthest_point_sample_numpy(
+    points: np.ndarray, num_samples: int, start_idx: int
+) -> np.ndarray:
     selected = np.empty(num_samples, dtype=np.int64)
     min_dist2 = np.full(len(points), np.inf, dtype=np.float32)
     farthest = start_idx
@@ -47,7 +51,9 @@ def _farthest_point_sample_numpy(points: np.ndarray, num_samples: int, start_idx
     return selected
 
 
-def _farthest_point_sample_fast(points: np.ndarray, num_samples: int, start_idx: int) -> np.ndarray | None:
+def _farthest_point_sample_fast(
+    points: np.ndarray, num_samples: int, start_idx: int
+) -> np.ndarray | None:
     if len(points) < 32:
         return None
     try:

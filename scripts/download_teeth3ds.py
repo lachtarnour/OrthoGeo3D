@@ -2,13 +2,8 @@
 
 import argparse
 import subprocess
-import sys
 from pathlib import Path
 from zipfile import ZipFile
-
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from src.utils.logger import get_logger
 from src.utils.paths import get_download_dir, get_landmark_dir, get_teeth3ds_dir
@@ -37,9 +32,19 @@ LANDMARK_ARCHIVES = {
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Download and extract Teeth3DS and 3DTeethLand annotations.")
-    parser.add_argument("--download_only", action="store_true", help="Download archives without extracting them.")
-    parser.add_argument("--force_extract", action="store_true", help="Extract archives even if target files already exist.")
+    parser = argparse.ArgumentParser(
+        description="Download and extract Teeth3DS and 3DTeethLand annotations."
+    )
+    parser.add_argument(
+        "--download_only",
+        action="store_true",
+        help="Download archives without extracting them.",
+    )
+    parser.add_argument(
+        "--force_extract",
+        action="store_true",
+        help="Extract archives even if target files already exist.",
+    )
     args = parser.parse_args()
 
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -51,7 +56,9 @@ def main() -> None:
 
     if not args.download_only:
         extract_group("Teeth3DS", TEETH3DS_ARCHIVES, TEETH3DS_DIR, args.force_extract)
-        extract_group("3DTeethLand landmarks", LANDMARK_ARCHIVES, LANDMARK_DIR, args.force_extract)
+        extract_group(
+            "3DTeethLand landmarks", LANDMARK_ARCHIVES, LANDMARK_DIR, args.force_extract
+        )
 
     print_summary()
 
@@ -90,7 +97,9 @@ def download_file(url: str, out_path: Path) -> None:
     )
 
 
-def extract_group(title: str, archives: dict[str, str], target_dir: Path, force: bool) -> None:
+def extract_group(
+    title: str, archives: dict[str, str], target_dir: Path, force: bool
+) -> None:
     logger.info("== Extract %s ==", title)
     for filename in archives:
         zip_path = DOWNLOAD_DIR / filename

@@ -7,6 +7,7 @@
 .env.*
 !.env.example
 .vscode/
+.ruff_cache/
 .venv/
 .venv-pyg/
 venv/
@@ -49,3 +50,8 @@ checkpoints/
 notebooks/
 docs/
 doc/
+diagnostics/
+tests/
+aux/
+README.md
+.env.example

@@ -14,7 +14,9 @@ def ensure_dir(path: str | Path) -> Path:
 def load_mesh(path: str | Path) -> dict[str, np.ndarray]:
     path = Path(path)
     if path.suffix.lower() != ".obj":
-        raise ValueError(f"Unsupported file format: {path.suffix}. Only .obj files are supported.")
+        raise ValueError(
+            f"Unsupported file format: {path.suffix}. Only .obj files are supported."
+        )
 
     vertices, vertex_normals, faces = [], [], []
     with path.open("r", encoding="utf-8", errors="ignore") as f:
@@ -24,7 +26,9 @@ def load_mesh(path: str | Path) -> dict[str, np.ndarray]:
                 vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
             elif line.startswith("vn "):
                 parts = line.split()
-                vertex_normals.append([float(parts[1]), float(parts[2]), float(parts[3])])
+                vertex_normals.append(
+                    [float(parts[1]), float(parts[2]), float(parts[3])]
+                )
             elif line.startswith("f "):
                 raw = line.split()[1:]
                 polygon = [int(token.split("/", 1)[0]) - 1 for token in raw]
@@ -54,7 +58,9 @@ def load_teeth3ds_annotation(path: str | Path) -> dict[str, Any]:
 
     keys = set(data)
     if keys != {"id_patient", "jaw", "labels", "instances"}:
-        raise ValueError(f"Unexpected Teeth3DS annotation keys in {path}: {sorted(keys)}")
+        raise ValueError(
+            f"Unexpected Teeth3DS annotation keys in {path}: {sorted(keys)}"
+        )
 
     return {
         "id_patient": str(data["id_patient"]),

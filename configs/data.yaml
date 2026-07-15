@@ -1,18 +1,5 @@
-project:
-  seed: 42
-
-paths:
-  processed_dir: null
-  splits_dir: null
-
 dataset:
-  name: Teeth3DS
   split_source: teethseg22
-  splits:
-    - train
-    - val
-  expected_num_points: 60000
-  num_classes: 17
 
 segmentation_dataset:
   feature_keys:
@@ -25,7 +12,13 @@ dataloader:
     batch_size: 16
     num_workers: 4
     shuffle: true
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2
   eval:
     batch_size: 16
     num_workers: 4
     shuffle: false
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2

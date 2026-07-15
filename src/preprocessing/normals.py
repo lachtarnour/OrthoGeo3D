@@ -10,7 +10,9 @@ def normalize_vectors(vectors: np.ndarray, eps: float = 1.0e-12) -> np.ndarray:
     return (vectors / np.maximum(lengths, eps)).astype(np.float32)
 
 
-def compute_vertex_normals(vertices: np.ndarray, faces: np.ndarray | None) -> np.ndarray:
+def compute_vertex_normals(
+    vertices: np.ndarray, faces: np.ndarray | None
+) -> np.ndarray:
     """Compute vertex normals by averaging neighboring unit face normals."""
     vertices = np.asarray(vertices, dtype=np.float32)
     if faces is None or len(faces) == 0:

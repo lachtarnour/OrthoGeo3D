@@ -4,20 +4,29 @@ import torch
 from torch import nn
 
 
-def knn(x: torch.Tensor, k: int) -> torch.Tensor:
-    """Return k-nearest-neighbor indices for features shaped [B, C, N]."""
+def knn(x: torch.Tensor, k: int, chunk_size: int = 2048) -> torch.Tensor:
+    """Return exact k-nearest-neighbor indices without allocating a full NxN matrix."""
     if x.ndim != 3:
         raise ValueError(f"Expected x with shape [B, C, N], got {tuple(x.shape)}")
 
     num_points = x.shape[-1]
     if k <= 0:
         raise ValueError(f"k must be positive, got {k}")
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
     k = min(k, num_points)
 
-    inner = -2.0 * torch.matmul(x.transpose(2, 1), x)
-    xx = torch.sum(x**2, dim=1, keepdim=True)
-    pairwise_distance = -xx - inner - xx.transpose(2, 1)
-    return pairwise_distance.topk(k=k, dim=-1)[1]
+    indices = []
+    with torch.no_grad():
+        reference_norm = torch.sum(x**2, dim=1, keepdim=True)
+        for start in range(0, num_points, chunk_size):
+            query = x[:, :, start : start + chunk_size]
+            inner = -2.0 * torch.matmul(query.transpose(2, 1), x)
+            query_norm = torch.sum(query**2, dim=1).unsqueeze(-1)
+            pairwise_distance = -query_norm - inner - reference_norm
+            indices.append(pairwise_distance.topk(k=k, dim=-1)[1])
+    return torch.cat(indices, dim=1)
+
 
 def get_graph_feature(
     x: torch.Tensor,
@@ -37,58 +46,28 @@ def get_graph_feature(
     if x.ndim != 3:
         raise ValueError(f"Expected x with shape [B, C, N], got {tuple(x.shape)}")
 
-    B, C, N = x.shape
-
-    # 1. Compute nearest-neighbor indices if they are not provided
+    batch_size, channels, num_points = x.shape
     if idx is None:
-        idx = knn(x, k=k)  # [B, N, k]
+        idx = knn(x, k=k)
 
     k = idx.shape[-1]
-
-    # 2. Rearrange points from [B, C, N] to [B, N, C]
     x_points = x.transpose(2, 1).contiguous()
-
-    # 3. Flatten all batch points into one table: [B, N, C] -> [B*N, C]
-    x_flat = x_points.reshape(B * N, C)
-
-    # 4. Create a batch offset for each sample
-    batch_offsets = torch.arange(B, device=x.device).view(B, 1, 1) * N
-    # shape: [B, 1, 1]
-
-    # 5. Convert local neighbor indices into global indices
+    x_flat = x_points.reshape(batch_size * num_points, channels)
+    batch_offsets = (
+        torch.arange(batch_size, device=x.device).view(batch_size, 1, 1) * num_points
+    )
     idx_global = idx + batch_offsets
-    # shape: [B, N, k]
-
-    # 6. Flatten global indices for direct indexing
-    idx_global_flat = idx_global.reshape(-1)
-    # shape: [B*N*k]
-
-    # 7. Gather neighbor features from the flattened point table
-    neighbors = x_flat[idx_global_flat]
-    # shape: [B*N*k, C]
-
-    # 8. Restore neighbor tensor shape to [B, N, k, C]
-    neighbors = neighbors.view(B, N, k, C)
-
-    # 9. Repeat each center point k times to match its neighbors
-    centers = x_points.view(B, N, 1, C).expand(-1, -1, k, -1)
-    # shape: [B, N, k, C]
-
-    # 10. Build EdgeConv features: [neighbor - center, center]
+    neighbors = x_flat[idx_global.reshape(-1)]
+    neighbors = neighbors.view(batch_size, num_points, k, channels)
+    centers = x_points.view(batch_size, num_points, 1, channels).expand(-1, -1, k, -1)
     edge_features = torch.cat([neighbors - centers, centers], dim=-1)
-    # shape: [B, N, k, 2C]
-
-    # 11. Rearrange to PyTorch Conv2d format: [B, channels, N, k]
-    edge_features = edge_features.permute(0, 3, 1, 2).contiguous()
-    # shape: [B, 2C, N, k]
-
-    return edge_features
+    return edge_features.permute(0, 3, 1, 2).contiguous()
 
 
 def conv2d_block(in_channels: int, out_channels: int) -> nn.Sequential:
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
-        nn.BatchNorm2d(out_channels),
+        group_norm(out_channels),
         nn.LeakyReLU(negative_slope=0.2),
     )
 
@@ -96,9 +75,18 @@ def conv2d_block(in_channels: int, out_channels: int) -> nn.Sequential:
 def conv1d_block(in_channels: int, out_channels: int) -> nn.Sequential:
     return nn.Sequential(
         nn.Conv1d(in_channels, out_channels, kernel_size=1, bias=False),
-        nn.BatchNorm1d(out_channels),
+        group_norm(out_channels),
         nn.LeakyReLU(negative_slope=0.2),
     )
+
+
+def group_norm(num_channels: int) -> nn.GroupNorm:
+    if num_channels % 8 != 0:
+        raise ValueError(
+            f"GroupNorm requires channels divisible by 8, got {num_channels}"
+        )
+    return nn.GroupNorm(num_groups=8, num_channels=num_channels)
+
 
 class DGCNNSegmentation(nn.Module):
     """Dynamic Graph CNN for point-wise semantic segmentation.
@@ -110,12 +98,12 @@ class DGCNNSegmentation(nn.Module):
         self,
         input_channels: int = 6,
         num_classes: int = 17,
-        k:int = 20,
-        emb_dims:int = 1024,
-        dropout: float = 0.5,
+        k: int = 20,
+        emb_dims: int = 1024,
+        dropout: float = 0.3,
     ) -> None:
         super().__init__()
-        self.input_channels = input_channels 
+        self.input_channels = input_channels
         self.num_classes = num_classes
         self.k = k
         self.emb_dims = emb_dims
@@ -134,7 +122,9 @@ class DGCNNSegmentation(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.ndim != 3:
-            raise ValueError(f"Expected x with shape [B, N, C] or [B, C, N], got {tuple(x.shape)}")
+            raise ValueError(
+                f"Expected x with shape [B, N, C] or [B, C, N], got {tuple(x.shape)}"
+            )
         if x.shape[-1] == self.input_channels:
             x = x.transpose(2, 1).contiguous()
         elif x.shape[1] != self.input_channels:

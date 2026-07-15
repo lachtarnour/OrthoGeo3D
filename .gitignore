@@ -1,4 +1,5 @@
 __pycache__/
+.ruff_cache/
 *.py[cod]
 .DS_Store
 
@@ -9,7 +10,7 @@ __pycache__/
 venv/
 env/
 
-# Local experiment trackers
+# Local run tracking
 wandb/
 
 # Local exploratory notebooks
@@ -29,6 +30,9 @@ osf_cookie*.txt
 # Large datasets and generated samples
 data/
 
+# Local notes
+aux/
+
 credentials/
 
 # Training outputs and model artifacts
@@ -39,9 +43,6 @@ checkpoints/**
 *.pth
 *.ckpt
 *.onnx
-
-# Explicitly published experiment artifacts
-!experiments/**/*.pt
 
 # Downloaded archives
 *.zip

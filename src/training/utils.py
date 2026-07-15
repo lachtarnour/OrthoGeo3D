@@ -1,25 +1,18 @@
 import random
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
 
-from src.training.sampling import overlapping_multiview_sample_point_batch, random_sample_point_batch
 
-
-def set_seed(seed: int, deterministic: bool = False) -> None:
-    """Seed Python, NumPy and PyTorch for reproducible experiments."""
+def set_seed(seed: int) -> None:
+    """Seed Python, NumPy and PyTorch for reproducible runs."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-
-    if deterministic:
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
 
 
 def get_device(device: str | torch.device | None = "auto") -> torch.device:
@@ -27,7 +20,10 @@ def get_device(device: str | torch.device | None = "auto") -> torch.device:
     if device is None or str(device) == "auto":
         if torch.cuda.is_available():
             return torch.device("cuda")
-        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        if (
+            getattr(torch.backends, "mps", None) is not None
+            and torch.backends.mps.is_available()
+        ):
             return torch.device("mps")
         return torch.device("cpu")
 
@@ -35,7 +31,10 @@ def get_device(device: str | torch.device | None = "auto") -> torch.device:
     if resolved.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested but is not available")
     if resolved.type == "mps":
-        has_mps = getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available()
+        has_mps = (
+            getattr(torch.backends, "mps", None) is not None
+            and torch.backends.mps.is_available()
+        )
         if not has_mps:
             raise RuntimeError("MPS was requested but is not available")
     return resolved
@@ -54,12 +53,6 @@ def move_to_device(value: Any, device: torch.device) -> Any:
     return value
 
 
-def ensure_dir(path: str | Path) -> Path:
-    path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
 def flatten_metrics(metrics: Mapping[str, Any]) -> dict[str, float]:
     """Keep scalar numeric metrics in a plain dictionary."""
     flat: dict[str, float] = {}
@@ -73,14 +66,19 @@ def flatten_metrics(metrics: Mapping[str, Any]) -> dict[str, float]:
     return flat
 
 
-def average_metric_dicts(items: Sequence[Mapping[str, float]]) -> dict[str, float]:
+def average_metric_dicts(
+    items: Sequence[Mapping[str, float]],
+    weights: Sequence[float],
+) -> dict[str, float]:
     if not items:
         return {}
+    if len(items) != len(weights):
+        raise ValueError("Metric items and weights must have the same length")
 
     totals: dict[str, float] = {}
-    counts: dict[str, int] = {}
-    for item in items:
+    weight_sums: dict[str, float] = {}
+    for item, weight in zip(items, weights, strict=True):
         for key, value in item.items():
-            totals[key] = totals.get(key, 0.0) + float(value)
-            counts[key] = counts.get(key, 0) + 1
-    return {key: totals[key] / counts[key] for key in totals}
+            totals[key] = totals.get(key, 0.0) + float(value) * float(weight)
+            weight_sums[key] = weight_sums.get(key, 0.0) + float(weight)
+    return {key: totals[key] / weight_sums[key] for key in totals}

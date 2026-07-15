@@ -10,7 +10,14 @@ from scipy.spatial import cKDTree
 from src.utils.io import load_json
 
 
-LANDMARK_CLASSES = {"Mesial", "Distal", "Cusp", "InnerPoint", "OuterPoint", "FacialPoint"}
+LANDMARK_CLASSES = {
+    "Mesial",
+    "Distal",
+    "Cusp",
+    "InnerPoint",
+    "OuterPoint",
+    "FacialPoint",
+}
 
 
 def load_landmarks(path: str | Path | None) -> list[dict[str, Any]]:
@@ -25,13 +32,17 @@ def load_landmarks(path: str | Path | None) -> list[dict[str, Any]]:
 
     data = load_json(path)
     if set(data) != {"version", "description", "key", "objects"}:
-        raise ValueError(f"Unexpected 3DTeethLand landmark keys in {path}: {sorted(data)}")
+        raise ValueError(
+            f"Unexpected 3DTeethLand landmark keys in {path}: {sorted(data)}"
+        )
 
     landmarks = []
     for item in data["objects"]:
         keys = set(item)
         if keys != {"key", "class", "coord"}:
-            raise ValueError(f"Unexpected landmark object keys in {path}: {sorted(keys)}")
+            raise ValueError(
+                f"Unexpected landmark object keys in {path}: {sorted(keys)}"
+            )
 
         label = str(item["class"])
         if label not in LANDMARK_CLASSES:
@@ -84,14 +95,18 @@ def remap_landmarks_to_sample(
     source_indices: np.ndarray,
 ) -> list[dict[str, Any]]:
     index_map = {}
-    for sampled_idx, source_idx in enumerate(np.asarray(source_indices, dtype=np.int64)):
+    for sampled_idx, source_idx in enumerate(
+        np.asarray(source_indices, dtype=np.int64)
+    ):
         index_map.setdefault(int(source_idx), int(sampled_idx))
 
     remapped = []
     for lm in landmarks:
         item = dict(lm)
         nearest = item.get("nearest_vertex")
-        item["sampled_index"] = index_map.get(int(nearest)) if nearest is not None else None
+        item["sampled_index"] = (
+            index_map.get(int(nearest)) if nearest is not None else None
+        )
         remapped.append(item)
     return remapped
 
@@ -105,7 +120,9 @@ def landmarks_to_nested_dict(
     if not landmarks:
         return None
 
-    grouped: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+    grouped: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     unassigned: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for lm in landmarks:
         nearest_distance = lm.get(distance_key)
@@ -114,7 +131,9 @@ def landmarks_to_nested_dict(
             "coord": np.asarray(lm[coord_key], dtype=np.float32).tolist(),
             "nearest_vertex": lm.get("nearest_vertex"),
             "sampled_index": lm.get("sampled_index"),
-            distance_output_key: float(nearest_distance) if nearest_distance is not None else None,
+            distance_output_key: float(nearest_distance)
+            if nearest_distance is not None
+            else None,
         }
         cls = str(lm["class"])
         fdi = lm.get("fdi")
@@ -129,7 +148,9 @@ def landmarks_to_nested_dict(
     return result
 
 
-def build_landmark_tooth_records(landmarks: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+def build_landmark_tooth_records(
+    landmarks: list[dict[str, Any]],
+) -> list[dict[str, Any]] | None:
     if not landmarks:
         return None
 
@@ -143,7 +164,9 @@ def build_landmark_tooth_records(landmarks: list[dict[str, Any]]) -> list[dict[s
                 "class": lm.get("class"),
                 "fdi": int(fdi) if fdi is not None else None,
                 "instance": int(instance) if instance is not None else None,
-                "tooth_key": str(int(fdi)) if fdi is not None and int(fdi) > 0 else None,
+                "tooth_key": str(int(fdi))
+                if fdi is not None and int(fdi) > 0
+                else None,
                 "nearest_vertex": lm.get("nearest_vertex"),
                 "sampled_index": lm.get("sampled_index"),
                 "nearest_distance": lm.get("nearest_distance"),
